@@ -10,6 +10,9 @@ export const AppProvider = ({ children }) => {
   const selectLanguage = (lang) => {
     setLanguage(lang);
     localStorage.setItem('rozgaar_lang', lang);
+    if (user) {
+      updateProfile({ preferredLanguage: lang });
+    }
   };
 
   const t = (key, params = {}) => {
@@ -32,7 +35,12 @@ export const AppProvider = ({ children }) => {
   useEffect(() => {
     const storedUser = localStorage.getItem('rozgaar_user');
     if (storedUser) {
-      setUser(JSON.parse(storedUser));
+      const parsedUser = JSON.parse(storedUser);
+      setUser(parsedUser);
+      if (parsedUser.preferredLanguage) {
+        setLanguage(parsedUser.preferredLanguage);
+        localStorage.setItem('rozgaar_lang', parsedUser.preferredLanguage);
+      }
     }
   }, []);
 
@@ -46,6 +54,10 @@ export const AppProvider = ({ children }) => {
       currentUser = { phone, role: null };
       users[phone] = currentUser;
       localStorage.setItem('rozgaar_users_db', JSON.stringify(users));
+    } else if (currentUser.preferredLanguage) {
+      // Load their preferred language
+      setLanguage(currentUser.preferredLanguage);
+      localStorage.setItem('rozgaar_lang', currentUser.preferredLanguage);
     }
     
     setUser(currentUser);

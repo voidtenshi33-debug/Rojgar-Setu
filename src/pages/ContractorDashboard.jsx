@@ -5,7 +5,7 @@ import { PlusCircle, Megaphone, ShieldCheck, XCircle, Trash2, Edit } from 'lucid
 import { createNotification } from '../utils/notifications';
 
 const ContractorDashboard = () => {
-  const { user, t } = useContext(AppContext);
+  const { user, t, language, selectLanguage } = useContext(AppContext);
   const [showJobForm, setShowJobForm] = useState(false);
   const [jobs, setJobs] = useState([]);
   const [ratingFormVisibility, setRatingFormVisibility] = useState(null); // stores jobId
@@ -115,17 +115,25 @@ const ContractorDashboard = () => {
   }, [user?.phone, showJobForm, filterLocationNearby, filterSkillMatch]);
 
   const [jobForm, setJobForm] = useState({
-    count: '', requiredSkills: '', wage: '', location: '', duration: ''
+    count: '', requiredSkills: '', wage: '', location: '', duration: '', startDate: '', endDate: ''
   });
   const [editingJobId, setEditingJobId] = useState(null);
 
   const handleEditJob = (job) => {
+    let sDate = '', eDate = '';
+    if (job.duration && job.duration.includes(' to ')) {
+       const parts = job.duration.split(' to ');
+       sDate = parts[0];
+       eDate = parts[1];
+    }
     setJobForm({
       count: job.count || '',
       requiredSkills: job.requiredSkills || '',
       wage: job.wage || '',
       location: job.location || '',
-      duration: job.duration || ''
+      duration: job.duration || '',
+      startDate: sDate,
+      endDate: eDate
     });
     setEditingJobId(job.id);
     setShowJobForm(true);
@@ -136,12 +144,16 @@ const ContractorDashboard = () => {
     e.preventDefault();
     const allJobs = JSON.parse(localStorage.getItem('rozgaar_jobs_db')) || [];
     
+    const finalDuration = (jobForm.startDate && jobForm.endDate) 
+        ? `${jobForm.startDate} to ${jobForm.endDate}`
+        : jobForm.duration;
+
     if (editingJobId) {
       // Update existing job
       const jobIndex = allJobs.findIndex(j => j.id === editingJobId);
       if (jobIndex > -1) {
         const oldJob = allJobs[jobIndex];
-        allJobs[jobIndex] = { ...oldJob, ...jobForm };
+        allJobs[jobIndex] = { ...oldJob, ...jobForm, duration: finalDuration };
         localStorage.setItem('rozgaar_jobs_db', JSON.stringify(allJobs));
         
         // Notifications
@@ -161,6 +173,7 @@ const ContractorDashboard = () => {
       // Create new job
       const newJob = {
         ...jobForm,
+        duration: finalDuration,
         id: Date.now(),
         phone: user.phone,
         postedBy: user.name || user.company || 'Contractor',
@@ -183,7 +196,7 @@ const ContractorDashboard = () => {
       setJobs(allJobs.filter(j => j.phone === user.phone && j.status !== 'deleted'));
     }
     
-    setJobForm({ count: '', requiredSkills: '', wage: '', location: '', duration: '' });
+    setJobForm({ count: '', requiredSkills: '', wage: '', location: '', duration: '', startDate: '', endDate: '' });
     setShowJobForm(false);
   };
 
@@ -214,7 +227,17 @@ const ContractorDashboard = () => {
     const allJobs = JSON.parse(localStorage.getItem('rozgaar_jobs_db')) || [];
     const jobIndex = allJobs.findIndex(j => j.id === jobId);
     if (jobIndex > -1) {
-      allJobs[jobIndex].status = 'assigned';
+      const workers = allJobs[jobIndex].assignedWorkers || [];
+      if (!workers.some(w => w.phone === worker.phone)) {
+        workers.push({ phone: worker.phone, name: worker.name });
+      }
+      allJobs[jobIndex].assignedWorkers = workers;
+      
+      const requiredCount = parseInt(allJobs[jobIndex].count) || 1;
+      if (workers.length >= requiredCount) {
+        allJobs[jobIndex].status = 'assigned';
+      }
+      // legacy fallback
       allJobs[jobIndex].assignedTo = worker.phone;
       allJobs[jobIndex].assignedToName = worker.name;
       localStorage.setItem('rozgaar_jobs_db', JSON.stringify(allJobs));
@@ -259,11 +282,14 @@ const ContractorDashboard = () => {
     const jobIndex = allJobs.findIndex(j => j.id === jobId);
     
     if (jobIndex > -1) {
-      if (allJobs[jobIndex].lastAttendanceDate === today) {
+      allJobs[jobIndex].attendanceMarks = allJobs[jobIndex].attendanceMarks || {};
+      if (allJobs[jobIndex].attendanceMarks[workerPhone] === today) {
         alert("Attendance already marked for today!");
         return;
       }
       
+      allJobs[jobIndex].attendanceMarks[workerPhone] = today;
+      // legacy
       allJobs[jobIndex].lastAttendanceDate = today;
       localStorage.setItem('rozgaar_jobs_db', JSON.stringify(allJobs));
       setJobs(allJobs.filter(j => j.phone === user.phone));
@@ -291,34 +317,40 @@ const ContractorDashboard = () => {
     }
   };
 
-  const handleCompleteJob = (jobId, workerPhone) => {
+  const handleCompleteJob = (jobId) => {
     const allJobs = JSON.parse(localStorage.getItem('rozgaar_jobs_db')) || [];
     const jobIndex = allJobs.findIndex(j => j.id === jobId);
     
     if (jobIndex > -1) {
+      const workers = allJobs[jobIndex].assignedWorkers || [];
+      if (workers.length === 0 && allJobs[jobIndex].assignedTo) {
+          workers.push({ phone: allJobs[jobIndex].assignedTo, name: allJobs[jobIndex].assignedToName });
+      }
+
       allJobs[jobIndex].status = 'completed';
       allJobs[jobIndex].rating = ratingValue;
-      allJobs[jobIndex].completedAt = new Date().toISOString(); // Store completion date for fairness algorithm
+      allJobs[jobIndex].completedAt = new Date().toISOString();
       localStorage.setItem('rozgaar_jobs_db', JSON.stringify(allJobs));
       setJobs(allJobs.filter(j => j.phone === user.phone && j.status !== 'deleted'));
-    }
 
-    // Update User Stats
-    const allUsers = JSON.parse(localStorage.getItem('rozgaar_users_db')) || {};
-    if (allUsers[workerPhone]) {
-      const w = allUsers[workerPhone];
-      w.jobsCompleted = (w.jobsCompleted || 0) + 1;
-      w.ratingsTotal = (w.ratingsTotal || 0) + parseInt(ratingValue);
-      w.ratingsCount = (w.ratingsCount || 0) + 1;
-      allUsers[workerPhone] = w;
+      // Update User Stats
+      const allUsers = JSON.parse(localStorage.getItem('rozgaar_users_db')) || {};
+      workers.forEach(worker => {
+        if (allUsers[worker.phone]) {
+          const w = allUsers[worker.phone];
+          w.jobsCompleted = (w.jobsCompleted || 0) + 1;
+          w.ratingsTotal = (w.ratingsTotal || 0) + parseInt(ratingValue);
+          w.ratingsCount = (w.ratingsCount || 0) + 1;
+          allUsers[worker.phone] = w;
+          createNotification(worker.phone, `${user.name || user.company || 'Your contractor'} completed the job and rated you ${ratingValue} ⭐.`, 'job');
+        }
+      });
       localStorage.setItem('rozgaar_users_db', JSON.stringify(allUsers));
       
       const labourers = Object.values(allUsers).filter(u => u.role === 'labourer' && u.available);
       setAvailableLabourers(labourers);
-      
-      // Notify worker
-      createNotification(workerPhone, `${user.name || user.company || 'Your contractor'} completed the job and rated you ${ratingValue} ⭐.`, 'job');
     }
+
     setRatingFormVisibility(null);
     setRatingValue(5);
   };
@@ -354,8 +386,17 @@ const ContractorDashboard = () => {
 
   return (
     <div className="app-container">
-      <div className="top-bar">
+      <div className="top-bar" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <h2>{user?.company || user?.name || 'Contractor'}</h2>
+        <select 
+          className="form-select" 
+          style={{ width: 'auto', padding: '0.2rem 1rem 0.2rem 0.5rem', backgroundColor: 'rgba(255,255,255,0.2)', color: 'white', border: 'none', borderRadius: '0.25rem', fontSize: '0.8rem', cursor: 'pointer' }}
+          value={language}
+          onChange={(e) => selectLanguage(e.target.value)}
+        >
+          <option value="en" style={{color: 'black'}}>English</option>
+          <option value="hi" style={{color: 'black'}}>हिंदी</option>
+        </select>
       </div>
 
       <div className="screen-padding">
@@ -385,13 +426,18 @@ const ContractorDashboard = () => {
             </div>
             <div className="form-group">
               <label className="form-label">{t('duration')}</label>
-              <input type="text" className="form-input" placeholder={t('placeholderDuration') || "e.g. 10 Days"} required
-                value={jobForm.duration} onChange={e => setJobForm({...jobForm, duration: e.target.value})} />
+              <div style={{ display: 'flex', gap: '0.5rem' }}>
+                <input type="date" className="form-input" required title="Start Date"
+                  value={jobForm.startDate} onChange={e => setJobForm({...jobForm, startDate: e.target.value})} />
+                <span style={{ display: 'flex', alignItems: 'center', color: 'var(--text-muted)' }}>-</span>
+                <input type="date" className="form-input" required title="End Date"
+                  value={jobForm.endDate} onChange={e => setJobForm({...jobForm, endDate: e.target.value})} />
+              </div>
             </div>
             <button className="btn btn-secondary mt-2 text-center w-full" type="submit">
               {editingJobId ? (t('updateJob') || 'Update Job') : t('publishJob')}
             </button>
-            <button className="btn btn-outline mt-2 text-center w-full" type="button" onClick={() => { setShowJobForm(false); setEditingJobId(null); setJobForm({ count: '', requiredSkills: '', wage: '', location: '', duration: '' }); }}>{t('cancel')}</button>
+            <button className="btn btn-outline mt-2 text-center w-full" type="button" onClick={() => { setShowJobForm(false); setEditingJobId(null); setJobForm({ count: '', requiredSkills: '', wage: '', location: '', duration: '', startDate: '', endDate: '' }); }}>{t('cancel')}</button>
           </form>
         ) : (
           <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1.5rem' }}>
@@ -494,69 +540,80 @@ const ContractorDashboard = () => {
               {j.status === 'completed' && (
                 <div style={{ marginTop: '0.75rem', padding: '0.5rem', backgroundColor: '#f8fafc', borderRadius: '0.375rem', border: '1px solid #e2e8f0' }}>
                   <p style={{ margin: 0, fontSize: '0.875rem', color: '#475569' }}>
-                    {t('completedBy')} {j.assignedToName} | {t('ratingGiven')} {j.rating}⭐
+                    {t('completedBy')} {(j.assignedWorkers || (j.assignedToName ? [{name: j.assignedToName}] : [])).map(w => w.name).join(', ')} | {t('ratingGiven')} {j.rating}⭐
                   </p>
                 </div>
               )}
               
-              {j.status === 'assigned' && (
+              {(j.status === 'assigned' || (j.status !== 'completed' && j.assignedWorkers && j.assignedWorkers.length > 0)) && (
                 <div style={{ marginTop: '0.75rem', padding: '0.75rem', backgroundColor: '#f0fdf4', borderRadius: '0.375rem', border: '1px solid #bbf7d0' }}>
                   <p style={{ margin: 0, fontSize: '0.9rem', color: '#166534', fontWeight: '500', marginBottom: '0.5rem' }}>
-                    {t('assignedWorker')} {j.assignedToName} ({j.assignedTo})
+                    {t('assignedWorker')} ({j.assignedWorkers?.length || (j.assignedTo ? 1 : 0)}/{j.count || 1})
                   </p>
                   
-                  {j.lastAttendanceDate === new Date().toLocaleDateString() ? (
-                     <p style={{ margin: 0, fontSize: '0.8rem', color: 'var(--text-muted)' }}>✓ {t('attendanceMarked')}</p>
-                  ) : (
-                    <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1rem' }}>
-                      <button 
-                        className="btn" 
-                        style={{ flex: 1, padding: '0.5rem', backgroundColor: 'var(--success)', color: 'white' }}
-                        onClick={() => handleMarkAttendance(j.id, j.assignedTo, true)}
-                      >
-                        {t('present')}
-                      </button>
-                      <button 
-                        className="btn" 
-                        style={{ flex: 1, padding: '0.5rem', backgroundColor: 'var(--danger)', color: 'white' }}
-                        onClick={() => handleMarkAttendance(j.id, j.assignedTo, false)}
-                      >
-                        {t('absent')}
-                      </button>
-                    </div>
-                  )}
+                  {(j.assignedWorkers || (j.assignedTo ? [{phone: j.assignedTo, name: j.assignedToName}] : [])).map(worker => {
+                     const isMarked = (j.attendanceMarks && j.attendanceMarks[worker.phone] === new Date().toLocaleDateString()) || (!j.attendanceMarks && j.lastAttendanceDate === new Date().toLocaleDateString() && worker.phone === j.assignedTo);
+                     
+                     return (
+                      <div key={worker.phone} style={{ borderBottom: '1px solid #bbf7d0', paddingBottom: '0.5rem', marginBottom: '0.5rem'}}>
+                          <p style={{ margin: 0, fontSize: '0.85rem', fontWeight: 'bold' }}>{worker.name} ({worker.phone})</p>
+                          {isMarked ? (
+                            <p style={{ margin: 0, fontSize: '0.8rem', color: 'var(--text-muted)' }}>✓ {t('attendanceMarked')}</p>
+                          ) : (
+                            <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.25rem' }}>
+                              <button 
+                                className="btn" 
+                                style={{ flex: 1, padding: '0.25rem', fontSize:'0.75rem', backgroundColor: 'var(--success)', color: 'white' }} 
+                                onClick={() => handleMarkAttendance(j.id, worker.phone, true)}
+                              >
+                                {t('present')}
+                              </button>
+                              <button 
+                                className="btn" 
+                                style={{ flex: 1, padding: '0.25rem', fontSize:'0.75rem', backgroundColor: 'var(--danger)', color: 'white' }} 
+                                onClick={() => handleMarkAttendance(j.id, worker.phone, false)}
+                              >
+                                {t('absent')}
+                              </button>
+                            </div>
+                          )}
+                      </div>
+                     );
+                  })}
 
-                  {ratingFormVisibility === j.id ? (
-                    <div style={{ marginTop: '1rem', borderTop: '1px solid #bbf7d0', paddingTop: '1rem' }}>
-                      <label className="form-label" style={{ color: '#166534' }}>{t('rateWork')}</label>
-                      <select className="form-select mb-2" value={ratingValue} onChange={e => setRatingValue(e.target.value)}>
-                        <option value="5">5 - Excellent (बहुत अच्छा)</option>
-                        <option value="4">4 - Good (अच्छा)</option>
-                        <option value="3">3 - Average (ठीक है)</option>
-                        <option value="2">2 - Poor (ख़राब)</option>
-                        <option value="1">1 - Very Poor (बहुत ख़राब)</option>
-                      </select>
+                  {(j.status === 'assigned') && (
+                    ratingFormVisibility === j.id ? (
+                      <div style={{ marginTop: '1rem', borderTop: '1px solid #bbf7d0', paddingTop: '1rem' }}>
+                        <label className="form-label" style={{ color: '#166534' }}>{t('rateWork')}</label>
+                        <select className="form-select mb-2" value={ratingValue} onChange={e => setRatingValue(e.target.value)}>
+                          <option value="5">5 - Excellent (बहुत अच्छा)</option>
+                          <option value="4">4 - Good (अच्छा)</option>
+                          <option value="3">3 - Average (ठीक है)</option>
+                          <option value="2">2 - Poor (ख़राब)</option>
+                          <option value="1">1 - Very Poor (बहुत ख़राब)</option>
+                        </select>
+                        <button 
+                          className="btn btn-secondary w-full" 
+                          onClick={() => handleCompleteJob(j.id)}
+                        >
+                          {t('submitComplete')}
+                        </button>
+                        <button 
+                          className="btn btn-outline w-full mt-2" 
+                          onClick={() => setRatingFormVisibility(null)}
+                        >
+                          {t('cancel')}
+                        </button>
+                      </div>
+                    ) : (
                       <button 
-                        className="btn btn-secondary w-full" 
-                        onClick={() => handleCompleteJob(j.id, j.assignedTo)}
+                        className="btn" 
+                        style={{ width: '100%', padding: '0.5rem', backgroundColor: '#3730a3', color: 'white', marginTop: '0.5rem' }}
+                        onClick={() => setRatingFormVisibility(j.id)}
                       >
-                        {t('submitComplete')}
+                        {t('markCompleted')}
                       </button>
-                      <button 
-                        className="btn btn-outline w-full mt-2" 
-                        onClick={() => setRatingFormVisibility(null)}
-                      >
-                        {t('cancel')}
-                      </button>
-                    </div>
-                  ) : (
-                    <button 
-                      className="btn" 
-                      style={{ width: '100%', padding: '0.5rem', backgroundColor: '#3730a3', color: 'white', marginTop: '0.5rem' }}
-                      onClick={() => setRatingFormVisibility(j.id)}
-                    >
-                      {t('markCompleted')}
-                    </button>
+                    )
                   )}
                 </div>
               )}

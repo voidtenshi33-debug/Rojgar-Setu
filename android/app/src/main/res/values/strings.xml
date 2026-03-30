@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Rojgar Setu</string>
+    <string name="title_activity_main">Rojgar Setu</string>
+    <string name="package_name">com.rojgarsetu.app</string>
+    <string name="custom_url_scheme">com.rojgarsetu.app</string>
+</resources>

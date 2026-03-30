@@ -5,7 +5,7 @@ import { CheckCircle, XCircle, ShieldCheck } from 'lucide-react';
 import { createNotification } from '../utils/notifications';
 
 const LabourerDashboard = () => {
-  const { user, updateProfile, t } = useContext(AppContext);
+  const { user, updateProfile, t, language, selectLanguage } = useContext(AppContext);
   const [available, setAvailable] = useState(user?.available ?? true);
   const [availableJobs, setAvailableJobs] = useState([]);
   const [acceptedJobs, setAcceptedJobs] = useState([]);
@@ -44,11 +44,14 @@ const LabourerDashboard = () => {
     const jobs = JSON.parse(localStorage.getItem('rozgaar_jobs_db')) || [];
     
     const available = jobs.filter(j => 
-      j.status !== 'assigned' && j.status !== 'deleted' && !(j.rejectedBy || []).includes(user?.phone)
+      j.status !== 'assigned' && j.status !== 'deleted' && j.status !== 'completed' &&
+      !(j.rejectedBy || []).includes(user?.phone) && 
+      !(j.assignedWorkers || []).some(w => w.phone === user?.phone)
     );
     
     const accepted = jobs.filter(j => 
-      j.status === 'assigned' && j.assignedTo === user?.phone
+      j.status !== 'deleted' && j.status !== 'completed' &&
+      (j.assignedWorkers || []).some(w => w.phone === user?.phone)
     );
 
     const requests = JSON.parse(localStorage.getItem('rozgaar_job_requests_db')) || [];
@@ -80,7 +83,17 @@ const LabourerDashboard = () => {
     
     if (jobIndex > -1) {
       if (action === 'accept') {
-        allJobs[jobIndex].status = 'assigned';
+        const workers = allJobs[jobIndex].assignedWorkers || [];
+        if (!workers.some(w => w.phone === user.phone)) {
+          workers.push({ phone: user.phone, name: user.name });
+        }
+        allJobs[jobIndex].assignedWorkers = workers;
+        
+        const requiredCount = parseInt(allJobs[jobIndex].count) || 1;
+        if (workers.length >= requiredCount) {
+          allJobs[jobIndex].status = 'assigned';
+        }
+        // Legacy fallback just in case
         allJobs[jobIndex].assignedTo = user.phone;
         allJobs[jobIndex].assignedToName = user.name;
       } else if (action === 'reject') {
@@ -113,7 +126,17 @@ const LabourerDashboard = () => {
       const allJobs = JSON.parse(localStorage.getItem('rozgaar_jobs_db')) || [];
       const jobIndex = allJobs.findIndex(j => j.id === jobId);
       if (jobIndex > -1) {
-        allJobs[jobIndex].status = 'assigned';
+        const workers = allJobs[jobIndex].assignedWorkers || [];
+        if (!workers.some(w => w.phone === user.phone)) {
+          workers.push({ phone: user.phone, name: user.name });
+        }
+        allJobs[jobIndex].assignedWorkers = workers;
+        
+        const requiredCount = parseInt(allJobs[jobIndex].count) || 1;
+        if (workers.length >= requiredCount) {
+          allJobs[jobIndex].status = 'assigned';
+        }
+        // Legacy fallback
         allJobs[jobIndex].assignedTo = user.phone;
         allJobs[jobIndex].assignedToName = user.name;
         localStorage.setItem('rozgaar_jobs_db', JSON.stringify(allJobs));
@@ -125,7 +148,7 @@ const LabourerDashboard = () => {
 
   return (
     <div className="app-container">
-      <div className="top-bar">
+      <div className="top-bar" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
         <div>
           <h2>Hi, {user?.name?.split(' ')[0]}!</h2>
           <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.25rem', flexWrap: 'wrap' }}>
@@ -150,6 +173,15 @@ const LabourerDashboard = () => {
             </span>
           </div>
         </div>
+        <select 
+          className="form-select" 
+          style={{ width: 'auto', padding: '0.2rem 1rem 0.2rem 0.5rem', backgroundColor: 'rgba(255,255,255,0.2)', color: 'white', border: 'none', borderRadius: '0.25rem', fontSize: '0.8rem', cursor: 'pointer' }}
+          value={language}
+          onChange={(e) => selectLanguage(e.target.value)}
+        >
+          <option value="en" style={{color: 'black'}}>English</option>
+          <option value="hi" style={{color: 'black'}}>हिंदी</option>
+        </select>
       </div>
 
       <div className="screen-padding">

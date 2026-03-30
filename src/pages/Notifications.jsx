@@ -62,31 +62,39 @@ const Notifications = () => {
               onClick={() => handleMarkRead(n.id)}
               style={{ 
                 display: 'flex', 
-                gap: '1rem', 
-                alignItems: 'center', 
-                opacity: n.read ? 0.6 : 1,
-                borderLeft: !n.read ? '4px solid var(--primary)' : '4px solid transparent',
-                cursor: 'pointer'
+                gap: '0.75rem', 
+                alignItems: 'flex-start', 
+                backgroundColor: n.read ? '#ffffff' : '#f8fafc',
+                border: '1px solid',
+                borderColor: n.read ? '#e2e8f0' : '#cbd5e1',
+                boxShadow: n.read ? 'none' : '0 1px 3px rgba(0,0,0,0.1)',
+                cursor: 'pointer',
+                transition: 'all 0.2s',
+                marginBottom: '0.75rem',
+                padding: '1rem',
+                borderRadius: '0.5rem'
               }}
             >
-              <div style={{ padding: '0.5rem', backgroundColor: '#f1f5f9', borderRadius: '50%' }}>
+              <div style={{ padding: '0.5rem', backgroundColor: n.read ? '#f1f5f9' : '#e0e7ff', borderRadius: '50%', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                 {getIcon(n.type)}
               </div>
-              <div style={{ flex: 1 }}>
-                <p style={{ margin: 0, fontSize: '0.9rem', fontWeight: !n.read ? 'bold' : 'normal', color: 'var(--text-main)' }}>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <p style={{ margin: 0, fontSize: '0.9rem', fontWeight: !n.read ? '600' : '400', color: n.read ? '#475569' : '#0f172a', lineHeight: '1.4', wordBreak: 'break-word' }}>
                   {n.message}
                 </p>
-                <p style={{ margin: '0.25rem 0 0 0', fontSize: '0.75rem', color: 'var(--text-muted)' }}>
-                  {new Date(n.timestamp).toLocaleString()}
+                <p style={{ margin: '0.35rem 0 0 0', fontSize: '0.75rem', color: '#94a3b8' }}>
+                  {new Date(n.timestamp).toLocaleDateString(undefined, { day: 'numeric', month: 'short' })} • {new Date(n.timestamp).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
                 </p>
               </div>
-              {!n.read && <div style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: 'var(--primary)' }}></div>}
+              {!n.read && <div style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: 'var(--primary)', marginTop: '0.5rem', flexShrink: 0 }}></div>}
             </div>
           ))
         ) : (
-          <div className="text-center" style={{ marginTop: '2rem', color: 'var(--text-muted)' }}>
-            <Bell size={48} opacity={0.2} style={{ margin: '0 auto 1rem auto', display: 'block' }} />
-            <p>{t('noNotifications') || 'No notifications yet.'}</p>
+          <div className="text-center" style={{ marginTop: '3rem', color: 'var(--text-muted)' }}>
+            <div style={{ width: '64px', height: '64px', borderRadius: '50%', backgroundColor: '#f1f5f9', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 1rem auto' }}>
+              <Bell size={32} opacity={0.3} />
+            </div>
+            <p style={{ fontSize: '0.95rem', fontWeight: '500' }}>{t('noNotifications') || 'No notifications yet.'}</p>
           </div>
         )}
       </div>

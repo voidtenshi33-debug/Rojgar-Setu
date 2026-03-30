@@ -38,6 +38,7 @@ body {
 
 /* Layout Utilities */
 .app-container {
+  width: 100%;
   max-width: 480px;
   margin: 0 auto;
   min-height: 100vh;
